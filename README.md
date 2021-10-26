@@ -14,3 +14,7 @@
 ## テストの実行
 
 + $ ./vendor/bin/phpunit tests/Feature/ExampleTest.php<br>
+
+## Validation Requestファイルの作成
+
++ $ php artisan make:request TaskRequest<br>

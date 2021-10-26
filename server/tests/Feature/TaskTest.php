@@ -44,6 +44,46 @@ class TaskTest extends TestCase
     /**
      * @test
      */
+    public function タイルが空の場合は登録できない()
+    {
+        $data = [
+            'title' => ''
+        ];
+
+        $response = $this->postJson('api/tasks', $data);
+        // dd($response->json());
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(
+                [
+                    'title' => 'タイトルは、必ず指定してください。',
+                ]
+            );
+    }
+
+    /**
+     * @test
+     */
+    public function タイルが255文字を超えた場合は登録できない()
+    {
+        $data = [
+            'title' => str_repeat('あ', 256)
+        ];
+
+        $response = $this->postJson('api/tasks', $data);
+        // dd($response->json());
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(
+                [
+                    'title' => 'タイトルは、255文字以下にしてください。',
+                ]
+            );
+    }
+
+    /**
+     * @test
+     */
     public function 更新することができる()
     {
         $task = Task::factory()->create();

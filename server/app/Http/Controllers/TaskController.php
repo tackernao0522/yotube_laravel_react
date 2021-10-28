@@ -14,6 +14,8 @@ class TaskController extends Controller
      */
     public function index()
     {
+        // abort(500); // エラー表示される
+        // return []; // 登録数が0の場合
         return Task::orderByDesc('id')->get();
     }
 

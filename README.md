@@ -450,56 +450,92 @@ export default Router;
 + resources/ts/tasks/index.tsxの編集<br>
 
 ```
-import React from "react"
+import React, { useEffect, useState } from "react" // 編集
+import axios from "axios" // 追記
+
+// 型の定義 追記
+type Task = {
+  id: number
+  title: string
+  is_done: boolean
+  created_at: Date
+  updated_at: Date
+}
 
 const TaskPage: React.VFC = () => {
+
+  // 追記
+  const [tasks, setTasks] = useState<Task[]>([])
+
+  const getTasks = async () => {
+    const { data } = await axios.get<Task[]>('api/tasks') // { data }というように分割代入に書き換える。(dataの部分だけ取得できるようになる) <task[]>(型を指定)
+    // console.log(data);
+    setTasks(data)
+  } // 追記
+
+  // 追記
+  useEffect(() => {
+    getTasks()
+  })
+
   return (
     <>
-    <form className="input-form">
-      <div className="inner">
-          <input type="text" className="input" placeholder="TODOを入力してください。" value="" />
+      <form className="input-form">
+        <div className="inner">
+          <input type="text" className="input" placeholder="TODOを入力してください。" defaultValue="" /> // valueのところをdefaultValueに書き換え
           <button className="btn is-primary">追加</button>
-      </div>
-    </form>
-    <div className="inner">
-      <ul className="task-list">
+        </div>
+      </form>
+      <div className="inner">
+        <ul className="task-list">
+        // ここから
+          { tasks.map(task =>(
+            <li key={task.id}>
+              <label className="checkbox-label">
+                  <input type="checkbox" className="checkbox-input" />
+              </label>
+              <div><span>{task.title}</span></div>
+              <button className="btn is-delete">削除</button>
+            </li>
+          )) }
         <li>
+        // ここまで追記
             <label className="checkbox-label">
                 <input type="checkbox" className="checkbox-input" />
             </label>
             <div><span>新しいTODO</span></div>
             <button className="btn is-delete">削除</button>
-        </li>
-        <li>
-            <label className="checkbox-label">
+          </li>
+          <li>
+              <label className="checkbox-label">
                 <input type="checkbox" className="checkbox-input" />
-            </label>
-            <form><input type="text" className="input" value="編集中のTODO" /></form>
-            <button className="btn">更新</button>
-        </li>
-        <li className="done">
+              </label>
+              <form><input type="text" className="input" defaultValue="編集中のTODO" /></form> // valueのところをdefaultValueに書き換え
+              <button className="btn">更新</button>
+          </li>
+          <li className="done">
             <label className="checkbox-label">
                 <input type="checkbox" className="checkbox-input" />
             </label>
             <div><span>実行したTODO</span></div>
             <button className="btn is-delete">削除</button>
-        </li>
-        <li>
+          </li>
+          <li>
             <label className="checkbox-label">
                 <input type="checkbox" className="checkbox-input" />
             </label>
             <div><span>ゴミ捨て</span></div>
             <button className="btn is-delete">削除</button>
-        </li>
-        <li>
+          </li>
+          <li>
             <label className="checkbox-label">
                 <input type="checkbox" className="checkbox-input" />
             </label>
             <div><span>掃除</span></div>
             <button className="btn is-delete">削除</button>
-        </li>
-      </ul>
-    </div>
+          </li>
+        </ul>
+      </div>
     </>
   )
 }
@@ -507,53 +543,149 @@ const TaskPage: React.VFC = () => {
 export default TaskPage
 ```
 
-+ resources/ts/login/index.tsxの編集<br>
+### ReactQueryのインストール
+
++ `$ npm i -D react-query` <br>
+
+### resources/ts/App.tsxの編集
 
 ```
 import React from "react"
+import Router from "./router"
+import {QueryClient, QueryClientProvider} from "react-query" // 追記
 
-const LoginPage: React.VFC = () => {
+const App: React.VFC = () => {
+  // ここから追記
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false
+      },
+      mutations: {
+        retry: false
+      }
+    }
+  })
+  // ここまで
+
+  return (
+    <QueryClientProvider client={queryClient}> // 追記
+      <Router />
+    </QueryClientProvider> // 追記
+  )
+}
+
+export default App
+```
+
++ resources/ts/tasks/index.tsxの編集<br>
+
+```
+import React from "react" // 編集
+import axios from "axios" // 追記
+import {useQuery} from "react-query" // 追記
+
+// 型の定義
+type Task = {
+  id: number
+  title: string
+  is_done: boolean
+  created_at: Date
+  updated_at: Date
+}
+
+const TaskPage: React.VFC = () => {
+
+  /* 削除する
+  const [tasks, setTasks] = useState<Task[]>([])
+
+  const getTasks = async () => {
+    const { data } = await axios.get<Task[]>('api/tasks')
+    // console.log(data);
+    setTasks(data)
+  }
+
+  useEffect(() => {
+    getTasks()
+  })
+  */
+
+  // ここから追記
+  const { data:tasks, status } = useQuery('tasks', async () => {
+    const { data } = await axios.get<Task[]>('api/tasks')
+    return data
+  })
+  // ここまで
+
+  // ここから追記
+  if (status === 'loading') {
+    return <div className="loader" />
+  } else if (status === 'error') {
+    return <div className="align-center">データの読み込みに失敗しました。</div>
+  } else if (!tasks || tasks.length <= 0) {
+    return <div className="align-center">登録されたTODOはありません。</div>
+  }
+  // ここまで
+
   return (
     <>
-    <div className="login-page">
-      <div className="login-panel">
-        <form>
-          <div className="input-group">
-              <label>メールアドレス</label>
-              <input type="email" className="input" />
-          </div>
-          <div className="input-group">
-              <label>パスワード</label>
-              <input type="password" className="input" />
-          </div>
-          <button type="submit" className="btn">ログイン</button>
-        </form>
+      <form className="input-form">
+        <div className="inner">
+          <input type="text" className="input" placeholder="TODOを入力してください。" defaultValue="" />
+          <button className="btn is-primary">追加</button>
+        </div>
+      </form>
+      <div className="inner">
+        <ul className="task-list">
+          { tasks.map(task =>(
+            <li key={task.id}>
+              <label className="checkbox-label">
+                  <input type="checkbox" className="checkbox-input" />
+              </label>
+              <div><span>{task.title}</span></div>
+              <button className="btn is-delete">削除</button>
+            </li>
+          )) }
+            <li>
+            <label className="checkbox-label">
+                <input type="checkbox" className="checkbox-input" />
+            </label>
+            <div><span>新しいTODO</span></div>
+            <button className="btn is-delete">削除</button>
+          </li>
+          <li>
+              <label className="checkbox-label">
+                <input type="checkbox" className="checkbox-input" />
+              </label>
+              <form><input type="text" className="input" defaultValue="編集中のTODO" /></form>
+              <button className="btn">更新</button>
+          </li>
+          <li className="done">
+            <label className="checkbox-label">
+                <input type="checkbox" className="checkbox-input" />
+            </label>
+            <div><span>実行したTODO</span></div>
+            <button className="btn is-delete">削除</button>
+          </li>
+          <li>
+            <label className="checkbox-label">
+                <input type="checkbox" className="checkbox-input" />
+            </label>
+            <div><span>ゴミ捨て</span></div>
+            <button className="btn is-delete">削除</button>
+          </li>
+          <li>
+            <label className="checkbox-label">
+                <input type="checkbox" className="checkbox-input" />
+            </label>
+            <div><span>掃除</span></div>
+            <button className="btn is-delete">削除</button>
+          </li>
+        </ul>
       </div>
-      <div className="links"><a href="#">ヘルプ</a></div>
-    </div>
     </>
   )
 }
 
-export default LoginPage
-```
-
-+ resources/ts/help/index.tsxの編集
-
-```
-import React from "react"
-
-const HelpPage: React.VFC = () => {
-  return (
-    <div className="align-center">
-      <h1>ヘルプ</h1>
-      <p>
-        使い方を解説します。<br/>
-        このサイトはログインが必須です。
-      </p>
-    </div>
-  )
-}
-
-export default HelpPage
+export default TaskPage
 ```

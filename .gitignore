@@ -5,4 +5,5 @@ server/_ide_helper_models.php
 server/_ide_helper.php
 server/public/css/app.css
 server/public/js/index.js.LICENSE.txt
+server/public/js/index.js
 server/public/mix-manifest.json

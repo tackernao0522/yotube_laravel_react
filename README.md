@@ -689,3 +689,192 @@ const TaskPage: React.VFC = () => {
 
 export default TaskPage
 ```
+
+## コンポーネントとロジックの分割
+
++ resources/ts/types とディレクトリを作成<br>
+
++ resources/ts/pages/tasks/index.tsxの編集<br>
+
+```
+import React from "react"
+import TaskInput from "./components/TaskInput"
+import TaskList from "./components/TaskList"
+
+const TaskPage: React.VFC = () => {
+  return (
+    <>
+      <TaskInput />
+      <TaskList />
+    </>
+  )
+}
+
+export default TaskPage
+```
+
++ resources/ts/types/Task.tsを作成する
+
++ resources/ts/types/Task.tsに型定義を記述
+
+```
+export type Task = {
+  id: number
+  title: string
+  is_done: boolean
+  created_at: Date
+  updated_at: Date
+}
+```
+
++ resources/ts/queries とディレクトリを作成してその中にTaskQuery.tsを作成<br>
+
++ TaskQuery.tsに記述<br>
+
+```
+import * as api from "../api/TaskAPI"
+import { useQuery } from "react-query"
+
+const useTasks = () => {
+  return useQuery('tasks', () => api.getTasks())
+}
+
+export {
+  useTasks
+}
+```
+
++ resources/ts/api ディレクトリを作成し、その中にTaskAPI.tsを作成する<br>
+
+```
+import axios from "axios";
+import { Task } from "../types/Task"
+
+const getTasks = async () => {
+  const { data } = await axios.get<Task[]>('api/tasks')
+  return data
+}
+
+export {
+  getTasks
+}
+```
+
++ resources/ts/tasks/components ディレクトリを作成し、その中にTaskInput.tsx, TaskItem.tsx, TaskList.tsxを作成する<br>
+
++ TaskInput.tsxに記述<br>
+
+```
+import React from "react"
+
+const TaskInput: React.VFC = () => {
+  return (
+    <form className="input-form">
+      <div className="inner">
+        <input type="text" className="input" placeholder="TODOを入力してください。" defaultValue="" />
+        <button className="btn is-primary">追加</button>
+      </div>
+    </form>
+  )
+}
+
+export default TaskInput
+```
+
++ TaskItem.tsxに記述<br>
+
+```
+import React from "react";
+import { Task } from "../../../types/Task";
+
+type Props = {
+  task: Task;
+}
+
+const TaskItem: React.VFC<Props> = ({ task }) => {
+  return (
+    <li>
+      <label className="checkbox-label">
+        <input type="checkbox" className="checkbox-input" />
+      </label>
+      <div>
+        <span>
+          {task.title}
+        </span>
+      </div>
+      <button className="btn is-delete">削除</button>
+    </li>
+  )
+}
+
+export default TaskItem;
+```
+
++ TaskList.tsxに記述<br>
+
+```
+import React from "react";
+import { useTasks } from "../../../queries/TaskQuery"
+import TaskItem from "./TaskItem"
+
+const TaskList: React.VFC = () => {
+  const { data:tasks, status } = useTasks()
+
+  if (status === 'loading') {
+    return <div className="loader" />
+  } else if (status === 'error') {
+    return <div className="align-center">データの読み込みに失敗しました。</div>
+  } else if (!tasks || tasks.length <= 0) {
+    return <div className="align-center">登録されたTODOはありません。</div>
+  }
+
+  return (
+    <>
+      <div className="inner">
+        <ul className="task-list">
+          { tasks.map(task =>(
+            <TaskItem key={task.id} task={task} />
+          )) }
+            <li>
+            <label className="checkbox-label">
+                <input type="checkbox" className="checkbox-input" />
+            </label>
+            <div><span>新しいTODO</span></div>
+            <button className="btn is-delete">削除</button>
+          </li>
+          <li>
+              <label className="checkbox-label">
+                <input type="checkbox" className="checkbox-input" />
+              </label>
+              <form><input type="text" className="input" defaultValue="編集中のTODO" /></form>
+              <button className="btn">更新</button>
+          </li>
+          <li className="done">
+            <label className="checkbox-label">
+                <input type="checkbox" className="checkbox-input" />
+            </label>
+            <div><span>実行したTODO</span></div>
+            <button className="btn is-delete">削除</button>
+          </li>
+          <li>
+            <label className="checkbox-label">
+                <input type="checkbox" className="checkbox-input" />
+            </label>
+            <div><span>ゴミ捨て</span></div>
+            <button className="btn is-delete">削除</button>
+          </li>
+          <li>
+            <label className="checkbox-label">
+                <input type="checkbox" className="checkbox-input" />
+            </label>
+            <div><span>掃除</span></div>
+            <button className="btn is-delete">削除</button>
+          </li>
+        </ul>
+      </div>
+    </>
+  )
+}
+
+export default TaskList;
+```

@@ -878,3 +878,202 @@ const TaskList: React.VFC = () => {
 
 export default TaskList;
 ```
+
+## Todoのチェック機能の実装
+
++ TaskControllerにupdateDoneメソッドを最下部に実装する<br>
+
+```
+public function updateDone(Request $request, Task $task)
+{
+  $task->is_done = $request->is_done;
+
+  return $task()->json($task)
+    ? response()->json($task)
+    : response()->json([], 500);
+}
+```
+
++ api.phpにルートの追加<br>
+
+```
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+
+Route::apiResource('tasks', 'TaskController');
+Route::patch('tasks/update-done/{task}', 'TaskController@updateDone'); // 追加
+
+Route::middleware('auth:api')->get('/user', function (Request $request) {
+    return $request->user();
+});
+```
+ここまででLaravelでアップデート用のAPIの実装は完了<br>
+
+## Reactでアップデート処理の実装
+
++ resources/ts/api/TaskAPI.tsの編集<br>
+
+```
+import axios from "axios";
+import { Task } from "../types/Task"
+
+const getTasks = async () => {
+  const { data } = await axios.get<Task[]>('api/tasks')
+  return data
+}
+
+// ここから追記
+const updateDoneTask = async ({ id, is_done }: Task) => {
+  const { data } = await axios.patch<Task[]>(
+    `/api/tasks/update-done/${id}`,
+    { is_done: !is_done }
+  )
+  return data
+}
+// ここまで
+
+export {
+  getTasks,
+  updateDoneTask // 追記
+}
+```
+
++ resources/ts/queries/TaskQuery.tsの編集
+
+```
+import * as api from "../api/TaskAPI"
+import { useQuery, useMutation, useQueryClient } from "react-query" // 編集
+
+const useTasks = () => {
+  return useQuery('tasks', () => api.getTasks())
+}
+
+// ここから追記
+const useUpdateDoneTask = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation(api.updateDoneTask, {
+    onSuccess: () => {
+      queryClient.invalidateQueries('tasks')
+    }
+  })
+}
+// ここまで
+
+export {
+  useTasks,
+  useUpdateDoneTask // 追記
+}
+
+```
+
+## チェックが入れられるようにする
+
++ resources/ts/pages/tasks/TaskItem.tsxの編集<br>
+
+```
+import React from "react";
+import { Task } from "../../../types/Task";
+import { useUpdateDoneTask } from "../../../queries/TaskQuery" // 追記
+
+type Props = {
+  task: Task;
+}
+
+const TaskItem: React.VFC<Props> = ({ task }) => {
+  const updateDoneTask = useUpdateDoneTask() // 追記
+
+  return (
+    <li className={task.is_done ? 'done' : ''}> // 編集
+      <label className="checkbox-label">
+        <input
+          type="checkbox"
+          className="checkbox-input"
+          onClick={() => updateDoneTask.mutate(task)} // 追記
+        />
+      </label>
+      <div>
+        <span>
+          {task.title}
+        </span>
+      </div>
+      <button className="btn is-delete">削除</button>
+    </li>
+  )
+}
+
+export default TaskItem;
+```
+
+## ReactToastifyのインストール
+
++ `$ npm i -D react-toastify` <br>
+
++ https://www.youtube.com/redirect?event=video_description&redir_token=QUFFLUhqa2kzNTZIakRhUG8wWm1oc2pNZTVORXFrUlNWQXxBQ3Jtc0tub0hudlhua0g5UGJWNGx5UjZrWF91V1QwSEFZZjJFZU5IMjBVZ0JLVWNtMWl6WUNpWjFCMkVPVUtFMFZNQ2R0S25uVVVPV2k0bmQ3U1RvVWw4UmJnMWZJN2poWEZCS2pnUzJuem1uaE03OEp6TFRTaw&q=https%3A%2F%2Fgithub.com%2Ffkhadra%2Freact-toastify (参考) <br>
+
++ resources/ts/App.tsxを編集
+
+```
+import React from "react"
+import Router from "./router"
+import {QueryClient, QueryClientProvider} from "react-query"
+import { ToastContainer } from 'react-toastify'; // 追記
+import 'react-toastify/dist/ReactToastify.css'; // 追記
+
+
+const App: React.VFC = () => {
+  // 追記
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false
+      },
+      mutations: {
+        retry: false
+      }
+    }
+  })
+
+  return (
+    // 追記 //
+    <QueryClientProvider client={queryClient}>
+      <Router />
+      <ToastContainer hideProgressBar={true} /> // 追記
+    </QueryClientProvider>
+  )
+}
+
+export default App
+```
+
++ resources/ts/queries/TaskQuery.tsの編集<br>
+
+```
+import * as api from "../api/TaskAPI"
+import { useQuery, useMutation, useQueryClient } from "react-query"
+import { toast } from "react-toastify" // 追記
+
+const useTasks = () => {
+  return useQuery('tasks', () => api.getTasks())
+}
+
+const useUpdateDoneTask = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation(api.updateDoneTask, {
+    onSuccess: () => {
+      queryClient.invalidateQueries('tasks')
+    },
+    onError: () => { // 追記
+      toast.error('更新に失敗しました。')
+    }
+  })
+}
+
+export {
+  useTasks,
+  useUpdateDoneTask
+}
+```

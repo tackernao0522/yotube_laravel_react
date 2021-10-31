@@ -1077,3 +1077,134 @@ export {
   useUpdateDoneTask
 }
 ```
+
+## Todoの登録機能の実装
+
++ resources/ts/api/TaskAPI.tsの編集<br>
+
+```
+import axios from "axios";
+import { Task } from "../types/Task"
+
+const getTasks = async () => {
+  const { data } = await axios.get<Task[]>('api/tasks')
+  return data
+}
+
+const updateDoneTask = async ({ id, is_done }: Task) => {
+  const { data } = await axios.patch<Task>( // <= 修正
+    `/api/tasks/update-done/${id}`,
+    { is_done: !is_done }
+  )
+  return data
+}
+
+// ここから追記
+const createTask = async (title: string) => {
+  const { data } = await axios.post<Task>(
+    `/api/tasks`, { title: title }
+  )
+  return data
+}
+// ここまで
+
+export {
+  getTasks,
+  updateDoneTask,
+  createTask // 追記
+}
+```
+
++ resources/ts/queries/TaskQuery.tsの編集<br>
+
+```
+import * as api from "../api/TaskAPI"
+import { useQuery, useMutation, useQueryClient } from "react-query"
+import { toast } from "react-toastify"
+import { AxiosError } from "axios" // 追記
+
+const useTasks = () => {
+  return useQuery('tasks', () => api.getTasks())
+}
+
+const useUpdateDoneTask = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation(api.updateDoneTask, {
+    onSuccess: () => {
+      queryClient.invalidateQueries('tasks')
+    },
+    onError: () => {
+      toast.error('更新に失敗しました。')
+    }
+  })
+}
+
+// ここから追記
+const useCreateTask = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation(api.createTask, {
+    onSuccess: () => {
+      queryClient.invalidateQueries('tasks')
+      toast.success('登録に成功しました。')
+    },
+    onError: (error: AxiosError) => {
+      // console.log(error.response?.data)
+      if (error.response?.data.errors) {
+        Object.values(error.response?.data.errors).map(
+          (messages: any) => {
+            messages.map((message: string) => {
+              toast.error(message)
+            })
+          }
+        )
+      } else {
+        toast.error('登録に失敗しました。')
+      }
+    }
+  })
+}
+// ここまで
+
+export {
+  useTasks,
+  useUpdateDoneTask,
+  useCreateTask // 追記
+}
+```
+
++ resources/ts/pages/tasks/TaskInput.tsxの編集<br>
+
+```
+import React, { useState } from "react" // 編集
+import { useCreateTask } from "../../../queries/TaskQuery" // 追記
+
+const TaskInput: React.VFC = () => {
+  const [title, setTitle] = useState('') // 追記
+  const createTask = useCreateTask() // 追記
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => { // 追記
+    e.preventDefault() // 追記
+    createTask.mutate(title) // 追記
+    setTitle('') // 追記
+  } // 追記
+
+  return (
+    <form className="input-form" onSubmit={handleSubmit}>
+      <div className="inner">
+        <input
+          type="text"
+          className="input"
+          placeholder="TODOを入力してください。"
+          value={title} // 編集
+          onChange={(e) => setTitle(e.target.value)} // 追記
+        />
+        <button className="btn is-primary">追加</button>
+      </div>
+    </form>
+  )
+}
+
+export default TaskInput
+```

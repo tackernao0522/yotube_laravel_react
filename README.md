@@ -1208,3 +1208,261 @@ const TaskInput: React.VFC = () => {
 
 export default TaskInput
 ```
+
+## Todoの編集・削除機能の実装
+
++ resources/ts/api/TaskAPI.tsの編集<br>
+
+```
+import axios from "axios";
+import { Task } from "../types/Task"
+
+const getTasks = async () => {
+  const { data } = await axios.get<Task[]>('api/tasks')
+  return data
+}
+
+const updateDoneTask = async ({ id, is_done }: Task) => {
+  const { data } = await axios.patch<Task>(
+    `/api/tasks/update-done/${id}`,
+    { is_done: !is_done }
+  )
+  return data
+}
+
+const createTask = async (title: string) => {
+  const { data } = await axios.post<Task>(
+    `/api/tasks`, { title: title }
+  )
+  return data
+}
+
+// ここから追記
+const updateTask = async ({ id, task }: { id: number, task: Task }) => {
+  // patchのままでも良い
+  const { data } = await axios.put<Task>(
+    `/api/tasks/${id}`, task
+  )
+  return data
+}
+
+const deleteTask = async (id: number) => {
+  // patchのままでも良い
+  const { data } = await axios.delete<Task>(
+    `/api/tasks/${id}`
+  )
+  return data
+}
+// ここまで
+
+export {
+  getTasks,
+  updateDoneTask,
+  createTask,
+  updateTask, // 追記
+  deleteTask // 追記
+}
+```
+
++ resources/ts/queries/TaskQuery.tsの編集<br>
+
+```
+import * as api from "../api/TaskAPI"
+import { useQuery, useMutation, useQueryClient } from "react-query"
+import { toast } from "react-toastify"
+import { AxiosError } from "axios"
+
+const useTasks = () => {
+  return useQuery('tasks', () => api.getTasks())
+}
+
+const useUpdateDoneTask = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation(api.updateDoneTask, {
+    onSuccess: () => {
+      queryClient.invalidateQueries('tasks')
+    },
+    onError: () => {
+      toast.error('更新に失敗しました。')
+    }
+  })
+}
+
+const useCreateTask = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation(api.createTask, {
+    onSuccess: () => {
+      queryClient.invalidateQueries('tasks')
+      toast.success('登録に成功しました。')
+    },
+    onError: (error: AxiosError) => {
+      // console.log(error.response?.data)
+      if (error.response?.data.errors) {
+        Object.values(error.response?.data.errors).map(
+          (messages: any) => {
+            messages.map((message: string) => {
+              toast.error(message)
+            })
+          }
+        )
+      } else {
+        toast.error('登録に失敗しました。')
+      }
+    }
+  })
+}
+
+// ここから追記
+const useUpdateTask = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation(api.updateTask, {
+    onSuccess: () => {
+      queryClient.invalidateQueries('tasks')
+      toast.success('更新に成功しました。')
+    },
+    onError: (error: AxiosError) => {
+      // console.log(error.response?.data)
+      if (error.response?.data.errors) {
+        Object.values(error.response?.data.errors).map(
+          (messages: any) => {
+            messages.map((message: string) => {
+              toast.error(message)
+            })
+          }
+        )
+      } else {
+        toast.error('更新に失敗しました。')
+      }
+    }
+  })
+}
+
+const useDeleteTask = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation(api.deleteTask, {
+    onSuccess: () => {
+      queryClient.invalidateQueries('tasks')
+      toast.success('削除に成功しました。')
+    },
+    onError: () => {
+        toast.error('削除に失敗しました。')
+    }
+  })
+}
+// ここまで
+
+export {
+  useTasks,
+  useUpdateDoneTask,
+  useCreateTask,
+  useUpdateTask, // 追記
+  useDeleteTask // 追記
+}
+```
+
++ resources/ts/pages/tasks/componensts/TaskItem.tsxの編集<br>
+
+```
+import React, { useState } from "react";
+import { Task } from "../../../types/Task";
+import { useUpdateDoneTask, useUpdateTask, useDeleteTask } from "../../../queries/TaskQuery"
+import { toast } from "react-toastify"
+
+type Props = {
+  task: Task;
+}
+
+const TaskItem: React.VFC<Props> = ({ task }) => {
+  const updateDoneTask = useUpdateDoneTask()
+  const updateTask = useUpdateTask()
+  const deleteTask = useDeleteTask()
+
+  const [editTitle, setEditTitle] = useState<string|undefined>(undefined)
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditTitle(e.target.value)
+  }
+
+  const handleUpdate = (e: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+
+    if (!editTitle) {
+      toast.error('タイトルを入力してください。')
+      return
+    }
+
+    const newTask = {...task}
+    newTask.title = editTitle
+
+    updateTask.mutate({
+      id: task.id,
+      task: newTask
+    })
+
+    setEditTitle(undefined)
+  }
+
+  const handleToggleEdit = () => {
+    setEditTitle(task.title)
+  }
+
+  const handleOnKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (['Escape', 'Tab'].includes(e.key)) {
+      setEditTitle(undefined)
+    }
+  }
+
+  // input用のコンポーネントを作成
+  const itemInput = () => {
+    return (
+      <>
+        <form onSubmit={handleUpdate}>
+          <input
+            type="text"
+            className="input"
+            defaultValue={editTitle}
+            onChange={handleInputChange}
+            onKeyDown={handleOnKey}
+          />
+        </form>
+        <button className="btn" onClick={handleUpdate}>更新</button>
+      </>
+    )
+  }
+
+  const itemText = () => {
+    return (
+      <>
+        <div onClick={handleToggleEdit}>
+          <span>{task.title}</span>
+        </div>
+        <button
+          className="btn is-delete"
+          onClick={() => deleteTask.mutate(task.id)}
+        >
+          削除
+        </button>
+      </>
+    )
+  }
+
+  return (
+    <li className={task.is_done ? 'done' : ''}>
+      <label className="checkbox-label">
+        <input
+          type="checkbox"
+          className="checkbox-input"
+          onClick={() => updateDoneTask.mutate(task)}
+        />
+      </label>
+      { editTitle === undefined ? itemText() : itemInput() }
+    </li>
+  )
+}
+
+export default TaskItem;
+```

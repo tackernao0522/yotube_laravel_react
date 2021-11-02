@@ -1,10 +1,15 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { BrowserRouter, Switch, Route, Link } from "react-router-dom";
 import TaskPage from "./pages/tasks";
 import LoginPage from "./pages/login";
 import HelpPage from "./pages/help";
 
 const Router = () => {
+
+  useEffect(() => {
+
+  }, [])
+
   return (
     <BrowserRouter>
         <header className="global-head">

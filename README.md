@@ -1466,3 +1466,444 @@ const TaskItem: React.VFC<Props> = ({ task }) => {
 
 export default TaskItem;
 ```
+
+## Laravel Sanctumでユーザー認証機能の作成
+
++ ライブラリのインストール `$ composer require laravel/sanctum`<br>
+
++ `$ php artisan vendor:publish --provider="Laravel\Sanctum\SanctumServiceProvider"`を実行<br>
+
++ `app/Http/Kernel.php`の編集<br>
+
+```
+protected $middlewareGroups = [
+        'web' => [
+            \App\Http\Middleware\EncryptCookies::class,
+            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+            \Illuminate\Session\Middleware\StartSession::class,
+            // \Illuminate\Session\Middleware\AuthenticateSession::class,
+            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+            \App\Http\Middleware\VerifyCsrfToken::class,
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+        ],
+
+        'api' => [
+            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class, // 追記
+            'throttle:api',
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+        ],
+    ];
+```
+
++ `config/sanctum.php`の編集<br>
+
+```
+'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', sprintf(
+        '%s%s',
+        'localhost,localhost:8000,127.0.0.1,127.0.0.1:8000,::1', // localhost:8000に変更
+        env('APP_URL') ? ','.parse_url(env('APP_URL'), PHP_URL_HOST) : ''
+    ))),
+```
+
++ `personal_access_tokens`マイグレーションファイルを削除<br>
+
++ `php artisan make:seeder UsersTableSeeder` UsersTableSeeder.phpを作成<br>
+
++ `UsersTableSeeder.php`の編集<br>
+
+```
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+
+class UsersTableSeeder extends Seeder
+{
+    /**
+     * Run the database seeds.
+     *
+     * @return void
+     */
+    public function run()
+    {
+        \DB::table('users')->insert([
+            [
+                'name' => 'admin',
+                'email' => 'admin@example.com',
+                'email_verified_at' => now(),
+                'password' => \Hash::make('123456789'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name' => 'yamada',
+                'email' => 'yamada@example.com',
+                'email_verified_at' => now(),
+                'password' => \Hash::make('123456789'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name' => 'tanaka',
+                'email' => 'tanaka@example.com',
+                'email_verified_at' => now(),
+                'password' => \Hash::make('123456789'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+    }
+}
+```
+
++ `DatabaseSeeder.php`の編集<br>
+
+```
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+
+class DatabaseSeeder extends Seeder
+{
+    /**
+     * Seed the application's database.
+     *
+     * @return void
+     */
+    public function run()
+    {
+        $this->call(TasksTableSeeder::class);
+        $this->call(UsersTableSeeder::class); // 追記
+    }
+}
+```
+
++ `api.php`の編集<br>
+
+```
+Route::group(['middleware' => 'auth:sanctum'], function () {
+    Route::apiResource('tasks', 'TaskController');
+    Route::patch('tasks/update-done/{task}', 'TaskController@updateDone');
+    Route::get('user', function (Request $request) {
+        return $request->user();
+    });
+});
+```
+
++ この状態で `./vendor/bin/phpunit tests/Feature/TaskTest.php`を実行すると失敗する TaskApiに認証が必要になったのが原因である<br>
+
++ `tests/Feature/TaskTest.php`の編集 テストが成功する<br>
+
+```
+<?php
+
+namespace Tests\Feature;
+
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+use App\Models\Task;
+use App\Models\User; // 追記
+
+class TaskTest extends TestCase
+{
+    use RefreshDatabase;
+
+    // ここから追記
+    public function setUp(): void
+    {
+        parent::setUp();
+
+        $user = User::factory()->create();
+        $this->actingAs($user); // ログインした状態
+    }
+    // ここまで
+
+    /**
+     * @test
+     */
+    public function 一覧を取得できる()
+    {
+        $tasks = Task::factory()->count(10)->create();
+        // dd($tasks->toArray());
+
+        $response = $this->getJson('api/tasks');
+        // dd($response->json());
+
+        $response->assertOk()
+            ->assertJsonCount($tasks->count());
+    }
+
+    /**
+     * @test
+     */
+    public function 登録することができる()
+    {
+        $data = [
+            'title' => 'テスト投稿'
+        ];
+
+        $response = $this->postJson('api/tasks', $data);
+
+        // dd($response->json());
+
+        $response->assertCreated()
+            ->assertJsonFragment($data);
+    }
+
+    /**
+     * @test
+     */
+    public function タイルが空の場合は登録できない()
+    {
+        $data = [
+            'title' => ''
+        ];
+
+        $response = $this->postJson('api/tasks', $data);
+        // dd($response->json());
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(
+                [
+                    'title' => 'タイトルは、必ず指定してください。',
+                ]
+            );
+    }
+
+    /**
+     * @test
+     */
+    public function タイルが255文字を超えた場合は登録できない()
+    {
+        $data = [
+            'title' => str_repeat('あ', 256)
+        ];
+
+        $response = $this->postJson('api/tasks', $data);
+        // dd($response->json());
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(
+                [
+                    'title' => 'タイトルは、255文字以下にしてください。',
+                ]
+            );
+    }
+
+    /**
+     * @test
+     */
+    public function 更新することができる()
+    {
+        $task = Task::factory()->create();
+
+        $task->title = '書き換え';
+
+        // dd($task);
+
+        $response = $this->patchJson("api/tasks/{$task->id}", $task->toArray());
+        // dd($response->json());
+
+        $response->assertOk()
+            ->assertJsonFragment($task->toArray());
+    }
+
+    /**
+     * @test
+     */
+    public function 削除することができる()
+    {
+        $tasks = Task::factory()->count(10)->create();
+
+        $response = $this->deleteJson("api/tasks/1");
+        $response->assertOk();
+
+        $response = $this->getJson("api/tasks");
+        $response->assertJsonCount($tasks->count() - 1);
+    }
+}
+```
+
++ LoginControllerの作成 `$ php artisan make:controller LoginController`<br>
+
++ `LoginController`の編集<br>
+
+```
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class LoginController extends Controller
+{
+    /**
+     * Handle an authentication attempt.
+     *
+     * @param  Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function login(Request $request)
+    {
+        $credentials = $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required'],
+        ]);
+
+        if (Auth::attempt($credentials)) {
+            $request->session()->regenerate();
+
+            return response()->json(Auth::user());
+        }
+
+        return response()->json([], 401);
+    }
+
+    /**
+     * @param Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function logout(Request $request)
+    {
+        Auth::logout();
+
+        $request->session()->invalidate();
+
+        $request->session()->regenerateToken();
+
+        return response()->json(true);
+    }
+}
+```
+
++ `api.php` ルートの編集<br>
+
+```
+Route::post('login', 'LoginController@login'); // 追記
+Route::post('logout', 'LoginController@logout'); // 追記
+
+Route::group(['middleware' => 'auth:sanctum'], function () {
+    Route::apiResource('tasks', 'TaskController');
+    Route::patch('tasks/update-done/{task}', 'TaskController@updateDone');
+    Route::get('user', function (Request $request) {
+        return $request->user();
+    });
+});
+```
+
++ `router.tsx`の編集<br>
+
+```
+import React, { useEffect } from "react"; // 編集
+import { BrowserRouter, Switch, Route, Link } from "react-router-dom";
+import TaskPage from "./pages/tasks";
+import LoginPage from "./pages/login";
+import HelpPage from "./pages/help";
+import axios from "axios" // 追記
+
+const Router = () => {
+
+  // ここから追記
+  useEffect(() => {
+    axios.post('/api/login', {
+      email: 'admin@example.com',
+      password: '123456789'
+    }).then(response => {
+      console.log(response) // ログインしたユーザー情報が確認できる
+    })
+  }, [])
+  // ここまで
+
+  return (
+    <BrowserRouter>
+        <header className="global-head">
+          <ul>
+            <li>
+              <Link to ="/">ホーム</Link>
+            </li>
+            <li>
+              <Link to="/help">ヘルプ</Link>
+            </li>
+            <li>
+              <Link to="/login">ログイン</Link>
+            </li>
+            <li>
+              <span>ログアウト</span>
+            </li>
+          </ul>
+        </header>
+        <Switch>
+          <Route path="/help">
+            <HelpPage />
+          </Route>
+          <Route path="/login">
+            <LoginPage />
+          </Route>
+          <Route path="/">
+            <TaskPage />
+          </Route>
+        </Switch>
+    </BrowserRouter>
+  );
+};
+
+export default Router;
+```
+
++ ログインできることを確認できたら`router.tsx`の編集<br>
+
+```
+import React, { useEffect } from "react";
+import { BrowserRouter, Switch, Route, Link } from "react-router-dom";
+import TaskPage from "./pages/tasks";
+import LoginPage from "./pages/login";
+import HelpPage from "./pages/help";
+import axios from "axios" // 削除
+
+const Router = () => {
+
+  // ここから編集
+  useEffect(() => {
+
+  }, [])
+  // ここまで
+
+  return (
+    <BrowserRouter>
+        <header className="global-head">
+          <ul>
+            <li>
+              <Link to ="/">ホーム</Link>
+            </li>
+            <li>
+              <Link to="/help">ヘルプ</Link>
+            </li>
+            <li>
+              <Link to="/login">ログイン</Link>
+            </li>
+            <li>
+              <span>ログアウト</span>
+            </li>
+          </ul>
+        </header>
+        <Switch>
+          <Route path="/help">
+            <HelpPage />
+          </Route>
+          <Route path="/login">
+            <LoginPage />
+          </Route>
+          <Route path="/">
+            <TaskPage />
+          </Route>
+        </Switch>
+    </BrowserRouter>
+  );
+};
+
+export default Router;
+```

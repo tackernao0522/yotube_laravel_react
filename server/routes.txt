@@ -1,13 +1,22 @@
-+--------+-----------+------------------------------+---------------+------------------------------------------------+------------+
-| Domain | Method    | URI                          | Name          | Action                                         | Middleware |
-+--------+-----------+------------------------------+---------------+------------------------------------------------+------------+
-|        | GET|HEAD  | api/tasks                    | tasks.index   | App\Http\Controllers\TaskController@index      | api        |
-|        | POST      | api/tasks                    | tasks.store   | App\Http\Controllers\TaskController@store      | api        |
-|        | PATCH     | api/tasks/update-done/{task} |               | App\Http\Controllers\TaskController@updateDone | api        |
-|        | GET|HEAD  | api/tasks/{task}             | tasks.show    | App\Http\Controllers\TaskController@show       | api        |
-|        | PUT|PATCH | api/tasks/{task}             | tasks.update  | App\Http\Controllers\TaskController@update     | api        |
-|        | DELETE    | api/tasks/{task}             | tasks.destroy | App\Http\Controllers\TaskController@destroy    | api        |
-|        | GET|HEAD  | api/user                     |               | Closure                                        | api        |
-|        |           |                              |               |                                                | auth:api   |
-|        | GET|HEAD  | {all}                        |               | Closure                                        | web        |
-+--------+-----------+------------------------------+---------------+------------------------------------------------+------------+
++--------+-----------+------------------------------+---------------+------------------------------------------------------------+------------------------------------------+
+| Domain | Method    | URI                          | Name          | Action                                                     | Middleware                               |
++--------+-----------+------------------------------+---------------+------------------------------------------------------------+------------------------------------------+
+|        | POST      | api/login                    |               | App\Http\Controllers\LoginController@login                 | api                                      |
+|        | POST      | api/logout                   |               | App\Http\Controllers\LoginController@logout                | api                                      |
+|        | GET|HEAD  | api/tasks                    | tasks.index   | App\Http\Controllers\TaskController@index                  | api                                      |
+|        |           |                              |               |                                                            | App\Http\Middleware\Authenticate:sanctum |
+|        | POST      | api/tasks                    | tasks.store   | App\Http\Controllers\TaskController@store                  | api                                      |
+|        |           |                              |               |                                                            | App\Http\Middleware\Authenticate:sanctum |
+|        | PATCH     | api/tasks/update-done/{task} |               | App\Http\Controllers\TaskController@updateDone             | api                                      |
+|        |           |                              |               |                                                            | App\Http\Middleware\Authenticate:sanctum |
+|        | GET|HEAD  | api/tasks/{task}             | tasks.show    | App\Http\Controllers\TaskController@show                   | api                                      |
+|        |           |                              |               |                                                            | App\Http\Middleware\Authenticate:sanctum |
+|        | PUT|PATCH | api/tasks/{task}             | tasks.update  | App\Http\Controllers\TaskController@update                 | api                                      |
+|        |           |                              |               |                                                            | App\Http\Middleware\Authenticate:sanctum |
+|        | DELETE    | api/tasks/{task}             | tasks.destroy | App\Http\Controllers\TaskController@destroy                | api                                      |
+|        |           |                              |               |                                                            | App\Http\Middleware\Authenticate:sanctum |
+|        | GET|HEAD  | api/user                     |               | Closure                                                    | api                                      |
+|        |           |                              |               |                                                            | App\Http\Middleware\Authenticate:sanctum |
+|        | GET|HEAD  | sanctum/csrf-cookie          |               | Laravel\Sanctum\Http\Controllers\CsrfCookieController@show | web                                      |
+|        | GET|HEAD  | {all}                        |               | Closure                                                    | web                                      |
++--------+-----------+------------------------------+---------------+------------------------------------------------------------+------------------------------------------+

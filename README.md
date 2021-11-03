@@ -1907,3 +1907,425 @@ const Router = () => {
 
 export default Router;
 ```
+
+## ログイン機能の作成
+
++ resources/ts/types/User.tsを作成して中身を記述<br>
+
+```
+type User = {
+  id: number
+  name: string
+  email: string
+}
+
+export {
+  User
+}
+```
+
++ resources/ts/api/AuthApi.tsの作成<br>
+
+```
+import axios from "axios";
+import { User } from "../types/User"
+
+const getUser = async () => {
+  const { data } = await axios.get<User>('api/user')
+  return data
+}
+
+const login = async ({ email, password }: { email: string, password: string}) => {
+  const { data } = await axios.post<User>(
+    `/api/login`, { email, password }
+  )
+  return data
+}
+
+const logout = async () => {
+  const { data } = await axios.post<User>(`/api/logout`)
+    return data
+}
+
+export {
+  getUser,
+  login,
+  logout
+}
+```
+
++ resources/ts/queries/AuthQuery.tsを作成する<br>
+
+```
+import * as api from "../api/AuthAPI"
+import { useQuery, useMutation } from "react-query"
+import { toast } from "react-toastify"
+
+const useUser = () => {
+  return useQuery('users', api.getUser)
+}
+
+const useLogin = () => {
+  return useMutation(api.login, {
+    onSuccess: (user) => {
+      console.log(user)
+    },
+    onError: () => {
+      toast.error('ログインに失敗しました。')
+    }
+  })
+}
+
+const useLogout = () => {
+  return useMutation(api.logout, {
+    onSuccess: (user) => {
+      console.log(user)
+    },
+    onError: () => {
+      toast.error('ログアウトに失敗しました。')
+    }
+  })
+}
+
+export {
+  useUser,
+  useLogin,
+  useLogout
+}
+```
+
++ resources/ts/pages/login/index.tsxの編集<br>
+
+```
+import React, { useState } from "react" // 編集
+import { useLogin } from "../../queries/AuthQuery" // 追記
+
+// ここから追記
+const LoginPage: React.VFC = () => {
+  const login = useLogin()
+  const [email, setEmail] = useState('admin@example.com')
+  const [password, setPassword] = useState('123456789')
+
+  const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    login.mutate({ email, password })
+  }
+// ここまで
+
+  return (
+    <>
+    <div className="login-page">
+      <div className="login-panel">
+        <form onSubmit={handleLogin}> // 編集
+          <div className="input-group">
+              <label>メールアドレス</label>
+              <input
+                type="email"
+                className="input"
+                value={email} // 追記
+                onChange={e => setEmail(e.target.value)} // 追記
+              />
+          </div>
+          <div className="input-group">
+              <label>パスワード</label>
+              <input
+                type="password"
+                className="input"
+                value={password} // 追記
+                onChange={e => setPassword(e.target.value)} // 追記
+              />
+          </div>
+          <button type="submit" className="btn">ログイン</button>
+        </form>
+      </div>
+      <div className="links"><a href="#">ヘルプ</a></div>
+    </div>
+    </>
+  )
+}
+
+export default LoginPage
+```
+
+## Logout処理
+
++ `router.tsxの編集`<br>
+
+```
+import React, { useEffect } from "react";
+import { BrowserRouter, Switch, Route, Link } from "react-router-dom";
+import TaskPage from "./pages/tasks";
+import LoginPage from "./pages/login";
+import HelpPage from "./pages/help";
+import { useLogout } from "./queries/AuthQuery"; // 追記
+
+const Router = () => {
+  const logout = useLogout() // 追記
+
+  useEffect(() => {
+
+  }, [])
+
+  return (
+    <BrowserRouter>
+        <header className="global-head">
+          <ul>
+            <li>
+              <Link to ="/">ホーム</Link>
+            </li>
+            <li>
+              <Link to="/help">ヘルプ</Link>
+            </li>
+            <li>
+              <Link to="/login">ログイン</Link>
+            </li>
+            <li onClick={() => logout.mutate()}> {/* 編集 */}
+              <span>ログアウト</span>
+            </li>
+          </ul>
+        </header>
+        <Switch>
+          <Route path="/help">
+            <HelpPage />
+          </Route>
+          <Route path="/login">
+            <LoginPage />
+          </Route>
+          <Route path="/">
+            <TaskPage />
+          </Route>
+        </Switch>
+    </BrowserRouter>
+  );
+};
+
+export default Router;
+```
+
+## resources/ts/hooks/AuthContext.tsxを作成
+
+```
+import React, { createContext, useState, useContext, ReactNode } from "react"
+
+type AuthContextProps = {
+  isAuth: boolean
+  setIsAuth: React.Dispatch<React.SetStateAction<boolean>>
+}
+
+const AuthContext = createContext<AuthContextProps>({
+  isAuth: false,
+  setIsAuth: () => {}
+})
+
+export const AuthProvider: React.VFC<{children: ReactNode}> = ({ children }) => {
+  const [isAuth, setIsAuth] = useState(false)
+
+  return (
+    <AuthContext.Provider value={{ isAuth, setIsAuth }}>
+      { children }
+    </AuthContext.Provider>
+  )
+}
+
+export const useAuth = () => useContext(AuthContext)
+```
+
++ `App.tsx`の編集<br>
+
+```
+import React from "react"
+import Router from "./router"
+import {QueryClient, QueryClientProvider} from "react-query"
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { AuthProvider } from "./hooks/AuthContext"; // 追記
+
+
+const App: React.VFC = () => {
+  // 追記
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false
+      },
+      mutations: {
+        retry: false
+      }
+    }
+  })
+
+  return (
+    <AuthProvider> // 追記
+      <QueryClientProvider client={queryClient}>
+        <Router />
+        <ToastContainer hideProgressBar={true} />
+      </QueryClientProvider>
+    </AuthProvider> // 追記
+  )
+}
+
+export default App
+```
+
++ `AuthQuery.tsの編集<br>
+
+```
+import * as api from "../api/AuthAPI"
+import { useQuery, useMutation } from "react-query"
+import { toast } from "react-toastify"
+import { useAuth } from "../hooks/AuthContext" // 追記
+
+const useUser = () => {
+  return useQuery('users', api.getUser)
+}
+
+const useLogin = () => {
+  const { setIsAuth } = useAuth() // 追記
+
+  return useMutation(api.login, {
+    onSuccess: (user) => {
+      // ここから編集
+      if (user) {
+        setIsAuth(true)
+      }
+      // ここまで
+    },
+    onError: () => {
+      toast.error('ログインに失敗しました。')
+    }
+  })
+}
+
+const useLogout = () => {
+  const { setIsAuth } = useAuth()
+
+  return useMutation(api.logout, {
+    onSuccess: (user) => {
+      // ここから編集
+      if (user) {
+        setIsAuth(false)
+      }
+      // ここまで
+    },
+    onError: () => {
+      toast.error('ログアウトに失敗しました。')
+    }
+  })
+}
+
+export {
+  useUser,
+  useLogin,
+  useLogout
+}
+```
+
++ `router.tsx`の編集<br>
+
+```
+import React, { useEffect } from "react";
+import { BrowserRouter, Switch, Route, Link, RouteProps, Redirect } from "react-router-dom" // 編集
+import TaskPage from "./pages/tasks";
+import LoginPage from "./pages/login";
+import NotFoundPage from "./pages/error"; // 追記
+import HelpPage from "./pages/help";
+import { useLogout, useUser } from "./queries/AuthQuery" // 編集
+import { useAuth } from "./hooks/AuthContext" // 追記
+
+const Router = () => {
+  const logout = useLogout()
+  const { isAuth, setIsAuth } = useAuth() // 追記
+  const { isLoading, data: authUser} = useUser() // 追記
+
+  // 編集
+  useEffect(() => {
+    if (authUser) {
+      setIsAuth(true)
+    }
+  }, [authUser])
+  // ここまで
+
+  // ここから追記
+  const GuardRoute = (props: RouteProps) => {
+    if (!isAuth) return <Redirect to="/login" />
+    return <Route {...props} />
+  }
+
+  const LoginRoute = (props: RouteProps) => {
+    if (isAuth) return <Redirect to="/" />
+    return <Route {...props} />
+  }
+  // ここまで
+
+  // ログイン後に使う ここから追記
+  const navigation = (
+    <header className="global-head">
+      <ul>
+        <li>
+          <Link to ="/">ホーム</Link>
+        </li>
+        <li>
+          <Link to="/help">ヘルプ</Link>
+        </li>
+        <li onClick={() => logout.mutate()}>
+          <span>ログアウト</span>
+        </li>
+      </ul>
+    </header>
+  )
+
+  // ログインしていない時
+  const loginNavigation = (
+    <header className="global-head">
+      <ul>
+        <li>
+          <Link to="/help">ヘルプ</Link>
+        </li>
+        <li>
+          <Link to="/login">ログイン</Link>
+        </li>
+      </ul>
+    </header>
+  )
+  // ここまで追記
+
+  if (isLoading) return <div className="loader"></div> // 追記
+
+  return (
+    <BrowserRouter>
+        { isAuth ? navigation : loginNavigation } // 編集
+        <Switch>
+          <Route path="/help">
+            <HelpPage />
+          </Route>
+          <LoginRoute path="/login"> // 編集
+            <LoginPage />
+          </LoginRoute> // 編集
+          <GuardRoute exact path="/"> // 編集
+            <TaskPage />
+          </GuardRoute> // 編集
+          <Route component={NotFoundPage} /> // 追記
+        </Switch>
+    </BrowserRouter>
+  );
+};
+
+export default Router;
+```
+
+### resources/ts/pages/error/index.tsxを作成
+
+```
+import React from "react"
+
+const NotFoundPage: React.VFC = () => {
+  return (
+    <div className="align-center">
+      <h1>404 NotFound</h1>
+      <p>お探しのページは見つかりませんでした。</p>
+    </div>
+  )
+}
+
+export default NotFoundPage
+```

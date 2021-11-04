@@ -13,9 +13,11 @@ class Task extends Model
     [
         'title',
         'is_done',
+        'user_id'
     ];
 
     protected $casts = [
         'is_done' => 'bool',
+        'user_id' => 'int'
     ];
 }

@@ -2329,3 +2329,418 @@ const NotFoundPage: React.VFC = () => {
 
 export default NotFoundPage
 ```
+
+## ユーザー毎のToDoの取得とポリシーの設定
+
+`tasks_table_php`マイグレーションファイルの編集<br>
+
+```
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class CreateTasksTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('tasks', function (Blueprint $table) {
+            $table->id();
+            $table->string('title');
+            $table->boolean('is_done')->default(false);
+            $table->foreignId('user_id')->constrained(); // 追加
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('tasks');
+    }
+}
+```
+
+`TaskFactory.php`の編集<br>
+
+```
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Task;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+class TaskFactory extends Factory
+{
+    /**
+     * The name of the factory's corresponding model.
+     *
+     * @var string
+     */
+    protected $model = Task::class;
+
+    /**
+     * Define the model's default state.
+     *
+     * @return array
+     */
+    public function definition()
+    {
+        return [
+            'title' => $this->faker->realText(rand(15, 40)),
+            'is_done' => $this->faker->boolean(10),
+            'user_id' => $this->faker->numberBetween(1, 3), // 追加
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+    }
+}
+```
+
+`TasksTableSeeder.php`の編集<br>
+
+```
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use App\Models\Task;
+
+class TasksTableSeeder extends Seeder
+{
+    /**
+     * Run the database seeds.
+     *
+     * @return void
+     */
+    public function run()
+    {
+        Task::factory()->count(20)->create(); // 編集
+    }
+}
+```
+`DatabaseSeeder.php`の編集<br>
+
+```
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+
+class DatabaseSeeder extends Seeder
+{
+    /**
+     * Seed the application's database.
+     *
+     * @return void
+     */
+    public function run()
+    {
+        // UsersTableSeederを先頭にする
+        $this->call(UsersTableSeeder::class);
+        $this->call(TasksTableSeeder::class);
+    }
+}
+```
+
++ `$ php artisan migrate:refresh --seed`の実行<br>
+
+`Models/Task.php`の編集<br>
+
+```
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Task extends Model
+{
+    use HasFactory;
+
+    protected $fillable =
+    [
+        'title',
+        'is_done',
+        'user_id' // 追記
+    ];
+
+    protected $casts = [
+        'is_done' => 'bool',
+        'user_id' => 'int' // 追記
+    ];
+}
+```
+
+`TaskFactory.php`の編集<br>
+
+```
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Task;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+class TaskFactory extends Factory
+{
+    /**
+     * The name of the factory's corresponding model.
+     *
+     * @var string
+     */
+    protected $model = Task::class;
+
+    /**
+     * Define the model's default state.
+     *
+     * @return array
+     */
+    public function definition()
+    {
+        $user_id = $this->faker->numberBetween(1, 3); // 追記
+        return [
+            'title' => $user_id . ':' . $this->faker->realText(rand(15, 40)), // 編集
+            'is_done' => $this->faker->boolean(10),
+            'user_id' => $user_id, // 編集
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+    }
+}
+```
+
++ `$ php artisan migrate:refresh --seed`の実行<br>
+
+`TaskController.php`の編集<br>
+
+```
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use App\Http\Requests\TaskRequest;
+use App\Models\Task;
+use Illuminate\Support\Facades\Auth; // 追記
+
+class TaskController extends Controller
+{
+    /**
+     * 
+     * @return \Illuminate\Support\Collection
+     */
+    public function index()
+    {
+        // abort(500); // エラー表示される
+        // return []; // 登録数が0の場合
+        return Task::where('user_id', Auth::id())->orderByDesc('id')->get(); // 編集
+    }
+
+    /**
+     * @param TaskRequest $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function store(TaskRequest $request)
+    {
+        $request->merge([
+            'user_id' => Auth::id()
+        ]); // 追記
+
+        $task = Task::create($request->all());
+
+        return $task
+            ? response()->json($task, 201)
+            : response()->json([], 500);
+    }
+
+    /**
+     * Update the specified resource in storage.
+     * 
+     * @param TaskRequest $request
+     * @param \Illuminate\Http\Task $task
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function update(TaskRequest $request, Task $task)
+    {
+        $task->title = $request->title;
+
+        return $task->update()
+            ? response()->json($task)
+            : response()->json([], 500);
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     * 
+     * @param \App\Models\Task $task
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function destroy(Task $task)
+    {
+        return $task->delete()
+            ? response()->json($task)
+            : response()->json([], 500);
+    }
+
+    /**
+     * is_doneの更新
+     * 
+     * @param Task $task
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updateDone(Request $request, Task $task)
+    {
+        // abort(500);
+
+        $task->is_done = $request->is_done;
+
+        return $task->update()
+            ? response()->json($task)
+            : response()->json([], 500);
+    }
+}
+```
+
+### ポリシーの作成
+
+`$ php artisan make:policy TaskPolicy`を実行<br>
+
+`Policies/TaskPolicy.php`の編集<br>
+
+```
+<?php
+
+namespace App\Policies;
+
+use App\Models\User;
+use App\Models\Task;
+use Illuminate\Auth\Access\HandlesAuthorization;
+
+class TaskPolicy
+{
+    use HandlesAuthorization;
+
+    public function checkUser(User $user, Task $task)
+    {
+        if ($user->id === $task->user_id) {
+            return true;
+        }
+    }
+}
+```
+
+`TaskController.php`の編集<br>
+
+```
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use App\Http\Requests\TaskRequest;
+use App\Models\Task;
+use Illuminate\Support\Facades\Auth;
+
+class TaskController extends Controller
+{
+    // ここから追記
+    public function __construct()
+    {
+        $this->middleware('can:checkUser,task')->only([
+            'updateDone', 'update', 'destroy'
+        ]);
+    }
+    // ここまで
+
+    /**
+     * 
+     * @return \Illuminate\Support\Collection
+     */
+    public function index()
+    {
+        // abort(500); // エラー表示される
+        // return []; // 登録数が0の場合
+        return Task::where('user_id', Auth::id())->orderByDesc('id')->get();
+    }
+
+    /**
+     * @param TaskRequest $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function store(TaskRequest $request)
+    {
+        $request->merge([
+            'user_id' => Auth::id()
+        ]);
+
+        $task = Task::create($request->all());
+
+        return $task
+            ? response()->json($task, 201)
+            : response()->json([], 500);
+    }
+
+    /**
+     * Update the specified resource in storage.
+     * 
+     * @param TaskRequest $request
+     * @param \Illuminate\Http\Task $task
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function update(TaskRequest $request, Task $task)
+    {
+        $task->title = $request->title;
+
+        return $task->update()
+            ? response()->json($task)
+            : response()->json([], 500);
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     * 
+     * @param \App\Models\Task $task
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function destroy(Task $task)
+    {
+        return $task->delete()
+            ? response()->json($task)
+            : response()->json([], 500);
+    }
+
+    /**
+     * is_doneの更新
+     * 
+     * @param Task $task
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updateDone(Request $request, Task $task)
+    {
+        // abort(500);
+
+        $task->is_done = $request->is_done;
+
+        return $task->update()
+            ? response()->json($task)
+            : response()->json([], 500);
+    }
+}
+```
